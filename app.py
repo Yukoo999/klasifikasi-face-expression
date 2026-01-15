@@ -86,7 +86,6 @@ custom_css = f"""
     [data-testid="stHeader"] {{background-color: transparent;}}
 
     /* --- PERBAIKAN HAPUS TOMBOL DEPLOY --- */
-    /* Menggunakan selector yang lebih kuat untuk menghilangkan tulisan Deploy */
     .stDeployButton, [data-testid="stDeployButton"] {{
         display: none !important;
         visibility: hidden !important;
@@ -145,18 +144,16 @@ custom_css = f"""
     }}
     
     /* --- PERBAIKAN TOOLTIP (TANDA TANYA) --- */
-    /* 1. Paksa ikon tanda tanya menjadi putih terang */
     [data-testid="stTooltipIcon"] svg {{
         fill: #FFFFFF !important;
         color: #FFFFFF !important;
         opacity: 1 !important;
     }}
     
-    /* 2. Pastikan kotak popup yang muncul backgroundnya gelap dan teksnya putih */
     div[data-testid="stTooltipHoverTarget"] > div,
     .stTooltip {{
-        background-color: #262730 !important; /* Background gelap */
-        color: #ffffff !important; /* Teks putih */
+        background-color: #262730 !important;
+        color: #ffffff !important;
         border: 1px solid rgba(255,255,255,0.2) !important;
         padding: 10px !important;
         width: auto !important;
@@ -164,7 +161,6 @@ custom_css = f"""
         max-width: 500px !important;
     }}
     
-    /* Pastikan teks di dalam popup benar-benar putih */
     div[role="tooltip"],
     div[role="tooltip"] p {{
         background-color: transparent !important;
@@ -388,8 +384,8 @@ class VideoProcessor(VideoProcessorBase):
         self.fps_last_update_time = time.time()
         self.fps_update_interval = 0.5 
         
-        self.temp_logs = []       
-        self.temp_gradcams = []   
+        self.temp_logs = []        
+        self.temp_gradcams = []    
 
     def process_gradcam_fullframe(self, full_frame, face_coords, roi_input, objID, label, timestamp):
         grad_model = MODELS.get("grad_model")
@@ -434,12 +430,15 @@ class VideoProcessor(VideoProcessorBase):
             save_path = os.path.join(IMG_FOLDER, fname)
             cv2.imwrite(save_path, full_frame_bgr)
             
+            # --- FIX: BATASI MEMORI LIST ---
             self.temp_gradcams.append({
                 "waktu": timestamp,
                 "object_id": objID,
                 "prediction": label,
                 "image_path": fname
             })
+            if len(self.temp_gradcams) > 20: 
+                self.temp_gradcams.pop(0) # Buang yang lama
 
         except Exception as e: print(f"GC Error: {e}")
 
@@ -529,7 +528,7 @@ class VideoProcessor(VideoProcessorBase):
                                     t_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                                     coords = (x, y, w, h)
                                     threading.Thread(target=self.process_gradcam_fullframe, 
-                                                    args=(img.copy(), coords, roi_input.copy(), objID, label, t_str)).start()
+                                                     args=(img.copy(), coords, roi_input.copy(), objID, label, t_str)).start()
                             
                             if objID not in self.gradcam_done_ids:
                                 bar_width = int(min(duration_on_screen / self.CAPTURE_DELAY, 1.0) * w)
@@ -548,12 +547,16 @@ class VideoProcessor(VideoProcessorBase):
         except: return frame
 
     def save_stats(self):
+        # --- FIX: BATASI MEMORI LIST LOG ---
         self.temp_logs.append({
             "waktu": datetime.now(),
             "total_visitor": len(self.unique_ids),
             "total_happy": self.happy_count,
             "total_sad": self.sad_count
         })
+        if len(self.temp_logs) > 50:
+            self.temp_logs.pop(0)
+
         self.unique_ids = set()
         self.happy_count = 0
         self.sad_count = 0
@@ -605,35 +608,44 @@ st.markdown("""
 """, unsafe_allow_html=True)
 # --------------
 
-# LOOP UI UPDATE
-if ctx.state.playing and ctx.video_processor:
-    while True:
-        try:
-            logs = ctx.video_processor.temp_logs
-            if logs:
-                df = pd.DataFrame(logs)
-                df = df.iloc[::-1] 
-                with table_placeholder.container():
-                    st.dataframe(df, height=300, use_container_width=True)
-            else:
-                 with table_placeholder.container():
-                    st.info("Belum ada data statistik.")
-        except: pass
+# ==========================================
+# FIX UTAMA: LOOPING YANG BENAR
+# ==========================================
+if ctx.state.playing:
+    # Cek apakah processor sudah siap
+    if ctx.video_processor:
+        # Loop ini HANYA berjalan selama status playing = True
+        # Jika stop ditekan, loop berhenti, script selesai, tidak hang.
+        while ctx.state.playing:
+            if not ctx.video_processor: break # Safety check double
+            
+            try:
+                # Gunakan list() untuk meng-copy data agar aman dari threading conflict
+                logs = list(ctx.video_processor.temp_logs)
+                if logs:
+                    df = pd.DataFrame(logs)
+                    df = df.iloc[::-1] 
+                    with table_placeholder.container():
+                        st.dataframe(df, height=300, use_container_width=True)
+                else:
+                     with table_placeholder.container():
+                        st.info("Belum ada data statistik.")
+            except: pass
 
-        try:
-            rows = ctx.video_processor.temp_gradcams
-            if not rows:
-                with gallery_placeholder.container():
-                     st.info("Belum ada capture Grad-CAM.")
-            else:
-                rows_reversed = rows[::-1]
-                with gallery_placeholder.container():
-                    cols_grid = st.columns(3)
-                    for i, row in enumerate(rows_reversed):
-                        fpath = os.path.join(IMG_FOLDER, row["image_path"])
-                        if os.path.exists(fpath):
-                            with cols_grid[i % 3]:
-                                st.image(fpath, caption=f"ID:{row['object_id']} | {row['prediction']}\n{row['waktu']}")
-        except: pass
+            try:
+                rows = list(ctx.video_processor.temp_gradcams)
+                if not rows:
+                    with gallery_placeholder.container():
+                         st.info("Belum ada capture Grad-CAM.")
+                else:
+                    rows_reversed = rows[::-1]
+                    with gallery_placeholder.container():
+                        cols_grid = st.columns(3)
+                        for i, row in enumerate(rows_reversed):
+                            fpath = os.path.join(IMG_FOLDER, row["image_path"])
+                            if os.path.exists(fpath):
+                                with cols_grid[i % 3]:
+                                    st.image(fpath, caption=f"ID:{row['object_id']} | {row['prediction']}\n{row['waktu']}")
+            except: pass
         
-        time.sleep(1)
+            time.sleep(1) # Refresh UI setiap 1 detik
