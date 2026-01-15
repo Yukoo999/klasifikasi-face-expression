@@ -1,5 +1,5 @@
-tensorflow-cpu==2.15.0
-av==10.0.0
-streamlit-webrtc==0.47.0
+streamlit
+streamlit-webrtc
 opencv-python-headless
-# Update ulang cache
+tensorflow
+numpy
