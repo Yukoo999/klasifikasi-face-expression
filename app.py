@@ -14,6 +14,7 @@ from datetime import datetime
 import pandas as pd
 import shutil
 import base64
+from twilio.rest import Client
 
 # ==========================================
 # 0. PAKSA DARK MODE (AUTO-CONFIG)
@@ -574,8 +575,21 @@ MODELS["config"]["mode"] = model_choice
 
 st.title(f"📹 Deteksi Ekspresi - Mode: {model_choice}")
 
+def get_ice_servers():
+    # Coba ambil dari Twilio jika ada di secrets
+    try:
+        account_sid = st.secrets["twilio"]["account_sid"]
+        auth_token = st.secrets["twilio"]["auth_token"]
+        client = Client(account_sid, auth_token)
+        token = client.tokens.create()
+        return token.ice_servers
+    except Exception as e:
+        # Fallback ke Google STUN (Mungkin mental di Cloud, tapi jalan di localhost)
+        st.warning(f"Menggunakan Google STUN (koneksi mungkin tidak stabil). Error Twilio: {e}")
+        return [{"urls": ["stun:stun.l.google.com:19302"]}]
+
 RTC_CONFIGURATION = RTCConfiguration(
-    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+    {"iceServers": get_ice_servers()}
 )
 
 ctx = webrtc_streamer(
