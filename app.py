@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase, RTCConfiguration
 import cv2
 import numpy as np
 import tensorflow as tf
@@ -370,7 +370,7 @@ class CentroidTracker:
             for col in unusedCols: self.register(inputCentroids[col])
         return self.objects
 
-class VideoProcessor(VideoTransformerBase):
+class VideoProcessor(VideoProcessorBase):
     def __init__(self):
         self.ct = CentroidTracker(maxDisappeared=40)
         self.unique_ids = set()
