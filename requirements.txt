@@ -1,0 +1,5 @@
+Flask==2.2.3
+opencv-python-headless
+tensorflow-cpu
+scipy
+numpy
