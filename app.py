@@ -574,6 +574,10 @@ MODELS["config"]["mode"] = model_choice
 
 st.title(f"📹 Deteksi Ekspresi - Mode: {model_choice}")
 
+RTC_CONFIGURATION = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
+
 ctx = webrtc_streamer(
     key="multi-model-fixed",
     video_processor_factory=VideoProcessor,
